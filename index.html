@@ -188,21 +188,28 @@ html, body { width:100%; height:100%; overflow:hidden; background:#f5f0eb; }
 }
 
 /* Auto-card pulse indicator */
-.auto-label {
-  font-size:9px; color:#ccc; text-transform:uppercase;
-  letter-spacing:0.08em; margin-bottom:8px;
-  display:flex; align-items:center; gap:5px;
+.auto-card {
+  display:none;
+  position:fixed;
+  bottom:24px; left:16px; right:16px;
+  background:#fff;
+  border-radius:12px;
+  padding:14px 15px;
+  z-index:100;
+  box-shadow:0 8px 32px rgba(0,0,0,0.18);
+  font-family:'Inter',-apple-system,sans-serif;
+  opacity:0;
+  transition:opacity 0.4s;
 }
-.auto-dot {
-  width:5px; height:5px; border-radius:50%;
-  background:#c8ff00; animation:blink 1.2s ease-in-out infinite;
+@media (hover:none) and (pointer:coarse) {
+  .auto-card { display:block; }
 }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div class="tt" id="tt"></div>
+<div class="auto-card" id="auto-card"></div>
 
 <script>
 const COLOR = { g:'#C7F751', o:'#ff8c00', r:'#ff3333' };
@@ -468,18 +475,53 @@ map.on('load', () => {
 
   map.getCanvas().style.cursor = 'default';
 
-  map.on('mouseenter', 'negocios-dot', (e) => {
-    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-    map.getCanvas().style.cursor = 'pointer';
-    showTooltip(e);
+  // ── DESKTOP: hover robusto con mousemove ──────────────────────────────
+  const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+  if (!isMobile) {
+    let lastIdx = -1;
+    map.on('mousemove', (e) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['negocios-dot'] });
+      if (features.length > 0) {
+        const idx = features[0].properties.idx;
+        if (idx !== lastIdx) {
+          lastIdx = idx;
+          if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+          map.getCanvas().style.cursor = 'pointer';
+          showTooltip({ features, point: e.point });
+        }
+      } else {
+        if (lastIdx !== -1) {
+          lastIdx = -1;
+          map.getCanvas().style.cursor = 'default';
+          hideTimer = setTimeout(() => tt.classList.remove('show'), 120);
+        }
+      }
+    });
+  }
+
+  // Click siempre (mobile tap + desktop)
+  map.on('click', 'negocios-dot', (e) => {
+    showTooltip({ features: e.features, point: e.point });
   });
 
-  map.on('mouseleave', 'negocios-dot', () => {
-    map.getCanvas().style.cursor = 'default';
-    hideTimer = setTimeout(() => tt.classList.remove('show'), 80);
-  });
+  // ── MOBILE: auto-card con los 4 especiales ────────────────────────────
+  if (isMobile) {
+    const ac = document.getElementById('auto-card');
+    const specials = DATA.filter(d => d.special);
+    let acIdx = 0;
 
-  map.on('click', 'negocios-dot', showTooltip);
+    function showAutoCard() {
+      if (!specials.length) return;
+      const d = specials[acIdx % specials.length];
+      ac.innerHTML = buildCard(d);
+      ac.style.opacity = '1';
+      acIdx++;
+    }
+
+    showAutoCard();
+    setInterval(showAutoCard, 4000);
+  }
 
   // ── ROTACIÓN ─────────────────────────────────────────────────────────
   let bearing = -22;
