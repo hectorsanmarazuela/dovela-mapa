@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dovela — Mapa</title>
+<script src="https://cdn.maptiler.com/maptiler-sdk-js/v2.4.0/maptiler-sdk.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.maptiler.com/maptiler-sdk-js/v2.4.0/maptiler-sdk.css">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:#f5f0eb; }
+
+.maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-logo,.maplibregl-ctrl-attrib { display:none !important; }
+
+#map {
+  width:100%; height:100vh;
+  cursor:default;
+}
+
+/* ── SONAR RINGS ─────────────────────────────────────── */
+.sonar-wrap {
+  position:absolute;
+  width:0; height:0;
+  pointer-events:none;
+  z-index:2;
+}
+
+.sonar-ring {
+  position:absolute;
+  border-radius:50%;
+  transform:translate(-50%,-50%);
+  animation: sonarPulse 2.2s ease-out infinite;
+  pointer-events:none;
+}
+
+.sonar-ring.g { background:rgba(90,150,0,0.80); }
+.sonar-ring.o { background:rgba(255,140,0,0.55); }
+.sonar-ring.r { background:rgba(220,40,40,0.55); }
+
+@keyframes sonarPulse {
+  0%   { width:10px; height:10px; opacity:0.85; }
+  100% { width:52px; height:52px; opacity:0; }
+}
+
+@keyframes sonarPulseLarge {
+  0%   { width:12px; height:12px; opacity:0.95; }
+  100% { width:80px; height:80px; opacity:0; }
+}
+
+.sonar-ring.has-sym { animation-name: sonarPulseLarge !important; }
+
+/* ── BOUNCE con símbolo ──────────────────────────────── */
+.bounce-wrap {
+  position:absolute;
+  width:0; height:0;
+  pointer-events:none;
+  z-index:6;
+}
+
+.bounce-dot {
+  position:absolute;
+  border-radius:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:9px;
+  font-weight:900;
+  line-height:1;
+}
+
+.bounce-dot.g {
+  width:13px; height:13px;
+  background:#C7F751;
+  color:rgba(0,0,0,0.75);
+  box-shadow:0 0 10px 4px rgba(199,247,81,0.7);
+  animation:bounceG 1.6s ease-in-out infinite;
+}
+
+.bounce-dot.r {
+  width:13px; height:13px;
+  background:#e00000;
+  color:#fff;
+  box-shadow:0 0 10px 4px rgba(220,0,0,0.65);
+  animation:bounceR 1.8s ease-in-out infinite;
+}
+
+@keyframes bounceG {
+  0%,100% { transform:translate(-50%,-50%) translateY(0);     }
+  30%     { transform:translate(-50%,-50%) translateY(-18px);  }
+  50%     { transform:translate(-50%,-50%) translateY(0);     }
+  65%     { transform:translate(-50%,-50%) translateY(-7px);   }
+  80%     { transform:translate(-50%,-50%) translateY(0);     }
+  90%     { transform:translate(-50%,-50%) translateY(-2px);   }
+}
+
+@keyframes bounceR {
+  0%,100% { transform:translate(-50%,-50%) translateY(0);     }
+  28%     { transform:translate(-50%,-50%) translateY(-16px);  }
+  48%     { transform:translate(-50%,-50%) translateY(0);     }
+  63%     { transform:translate(-50%,-50%) translateY(-6px);   }
+  78%     { transform:translate(-50%,-50%) translateY(0);     }
+  88%     { transform:translate(-50%,-50%) translateY(-2px);   }
+}
+
+/* ── BADGE en tooltip ────────────────────────────────── */
+.tt-badge-top {
+  display:inline-block;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  padding:3px 8px;
+  border-radius:4px;
+  margin-bottom:7px;
+}
+.tt-badge-top.sg { background:#eeffc0; color:#5a7a00; }
+.tt-badge-top.sr { background:#ffe0e0; color:#a80000; }
+
+/* ── TOOLTIP ─────────────────────────────────────────── */
+.tt {
+  position:fixed;
+  background:#fff;
+  border-radius:12px;
+  padding:14px 15px;
+  width:224px;
+  pointer-events:auto;
+  opacity:0;
+  transition:opacity 0.15s;
+  z-index:9999;
+  box-shadow:0 12px 40px rgba(0,0,0,0.18);
+  font-family:'Inter',-apple-system,sans-serif;
+  user-select:none;
+  cursor:default;
+}
+.tt.show { opacity:1; }
+
+/* ── AUTO-CARD ───────────────────────────────────────── */
+.auto-card {
+  position:fixed;
+  bottom:32px; right:32px;
+  background:#fff;
+  border-radius:12px;
+  padding:14px 15px;
+  width:224px;
+  z-index:100;
+  box-shadow:0 8px 32px rgba(0,0,0,0.15);
+  font-family:'Inter',-apple-system,sans-serif;
+  user-select:none;
+  transition:opacity 0.4s;
+  pointer-events:none;
+}
+
+.tt-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.tt-tag { font-size:10px; font-weight:700; color:#bbb; text-transform:uppercase; letter-spacing:0.07em; }
+.tt-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:100px; }
+.tt-badge.g { background:#e6fff3; color:#00884d; }
+.tt-badge.o { background:#fff4e6; color:#b35a00; }
+.tt-badge.r { background:#fff0f0; color:#cc2200; }
+.tt-name { font-size:13px; font-weight:700; color:#0a0a0a; margin-bottom:10px; line-height:1.3; }
+.tt-div  { height:1px; background:#f0f0f0; margin-bottom:9px; }
+.tt-row { margin-bottom:5px; }
+.tt-lbl { font-size:10px; color:#bbb; margin-bottom:1px; }
+.tt-val { font-size:12px; font-weight:700; line-height:1.3; }
+.tt-val.g { color:#00884d; }
+.tt-val.o { color:#b35a00; }
+.tt-val.r { color:#cc2200; }
+.tt-bar-wrap { background:#efefef; border-radius:4px; height:3px; margin-top:9px; overflow:hidden; }
+.tt-bar { height:3px; border-radius:4px; }
+.tt-bar.g { background:#00cc66; }
+.tt-bar.o { background:#ff8c00; }
+.tt-bar.r { background:#ff3333; }
+.tt-bar-meta { display:flex; justify-content:space-between; margin-top:3px; }
+.tt-bar-meta span   { font-size:10px; color:#ccc; }
+.tt-bar-meta strong { font-size:10px; font-weight:700; color:#666; }
+.tt-cta {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-top:10px; padding-top:9px; border-top:1px solid #f0f0f0;
+  font-size:11px; font-weight:700; color:#0a0a0a;
+  cursor:pointer; text-decoration:none; pointer-events:auto;
+}
+.tt-cta span { opacity:0.6; }
+.tt-cta-arr {
+  width:22px; height:22px; background:#c8ff00; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+
+/* Auto-card pulse indicator */
+.auto-label {
+  font-size:9px; color:#ccc; text-transform:uppercase;
+  letter-spacing:0.08em; margin-bottom:8px;
+  display:flex; align-items:center; gap:5px;
+}
+.auto-dot {
+  width:5px; height:5px; border-radius:50%;
+  background:#c8ff00; animation:blink 1.2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="tt" id="tt"></div>
+
+<script>
+const COLOR = { g:'#C7F751', o:'#ff8c00', r:'#ff3333' };
+const LABEL = { g:'Activo', o:'Débil', r:'Invisible' };
+
+const DATA = [
+  // ── CENTRO ───────────────────────────────────────────────────────────
+  { n:'Fontanería Valverde',       t:'Fontanería',   lon:-4.1183, lat:40.9481, c:'g', seo:87, sym:null, rows:[['Posición en Google','#1 para "fontanero Segovia"','g'],['Alcance mensual','Visible para 340 búsquedas/mes','g'],['Web renovada','Posiciona 22 palabras clave','g']], cta:null },
+  { n:'Estudio Burgos & Asoc.',    t:'Arquitectura', lon:-4.1178, lat:40.9472, c:'g', seo:94, sym:'✓', special:true, badge:'PERFECTO', rows:[['Posición en Google','#1 para "estudio arquitectura Segovia"','g'],['Visibilidad real','Recibe el 61% de todas las búsquedas del sector','g'],['Impacto demostrado','Cartera de proyectos con 9 meses de espera','g']], cta:null },
+  { n:'Bufete Segovia Legal',      t:'Derecho',      lon:-4.1170, lat:40.9505, c:'g', seo:91, sym:'✓', special:true, badge:'PERFECTO', rows:[['Posición en Google','#1 para "abogado Segovia" — sin pagar anuncios','g'],['Autoridad digital','43 palabras clave en primera página de Google','g'],['Resultado real','Agenda completa — nuevos clientes por lista de espera','g']], cta:null },
+  { n:'Notaría García Esteban',    t:'Notaría',      lon:-4.1248, lat:40.9512, c:'g', seo:85, sym:null, rows:[['Posición en Google','#1 para "notaría Segovia"','g'],['Alcance mensual','Visible para 380 búsquedas/mes','g'],['Web renovada','Posiciona 28 palabras clave','g']], cta:null },
+  { n:'Fisio La Fuencisla',        t:'Fisioterapia', lon:-4.1165, lat:40.9468, c:'o', seo:24, sym:null, rows:[['Posición en Google','No aparece en los 3 primeros resultados','o'],['Web','Web desactualizada, sin SEO','o'],['Oportunidad perdida','190 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Peluquería Estilo Norte',   t:'Peluquería',   lon:-4.1240, lat:40.9492, c:'o', seo:19, sym:null, rows:[['Posición en Google','Página 2 — nadie llega hasta ahí','o'],['Web','Sin web propia, solo Instagram','o'],['Oportunidad perdida','150 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Peluquería El Tío Pintado', t:'Peluquería',   lon:-4.1270, lat:40.9530, c:'o', seo:18, sym:null, rows:[['Posición en Google','Página 2 para "peluquería Segovia"','o'],['Web','Sin web, solo Facebook desactualizado','o'],['Oportunidad perdida','175 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Restaurante Plaza Mayor',   t:'Restauración', lon:-4.1190, lat:40.9515, c:'o', seo:22, sym:null, rows:[['Posición en Google','No aparece para "restaurante Segovia"','o'],['Web','Sin reservas online, sin SEO','o'],['Oportunidad perdida','280 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Tienda Souvenirs Catedral', t:'Comercio',     lon:-4.1205, lat:40.9532, c:'o', seo:16, sym:null, rows:[['Posición en Google','Invisible en búsquedas locales','o'],['Web','Sin web, sin ficha Google Business','o'],['Oportunidad perdida','120 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Bar Mesón El Acueducto',    t:'Hostelería',   lon:-4.1175, lat:40.9488, c:'o', seo:21, sym:null, rows:[['Posición en Google','Página 2 para "bar Segovia centro"','o'],['Web','Web sin actualizar desde 2018','o'],['Oportunidad perdida','200 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Electricista Félix Mora',   t:'Electricidad', lon:-4.1195, lat:40.9525, c:'r', seo:4,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible para el 100% de clientes potenciales','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Óptica La Artillería',      t:'Óptica',       lon:-4.1160, lat:40.9478, c:'r', seo:6,  sym:'!', special:true, badge:'SITUACIÓN CRÍTICA', rows:[['Presencia digital','Web de 2011. No indexada en móvil. Sin ficha Google activa','r'],['Lo que pierde ahora mismo','370 búsquedas/mes de "óptica Segovia" — va a la competencia','r'],['Brecha con el líder','Óptica Universitaria: 4.8★, 210 reseñas. Ellos: 3 reseñas sin responder','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Cerrajería Velázquez',      t:'Cerrajería',   lon:-4.1155, lat:40.9495, c:'r', seo:4,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Oportunidad perdida','210 búsquedas/mes van a la competencia','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Librería Antigua Segovia',  t:'Comercio',     lon:-4.1220, lat:40.9508, c:'r', seo:3,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Sus clientes la encuentran por casualidad','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Taller Relojería Centro',   t:'Servicios',    lon:-4.1188, lat:40.9500, c:'r', seo:2,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible para el 100% de clientes potenciales','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Pensión Casa Casco',        t:'Alojamiento',  lon:-4.1215, lat:40.9520, c:'r', seo:5,  sym:null, rows:[['Presencia digital','Sin web propia, solo Booking','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Oportunidad perdida','310 búsquedas/mes van a la competencia','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Zapatería Hermanos Calle',  t:'Comercio',     lon:-4.1232, lat:40.9502, c:'r', seo:3,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible digitalmente','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Gestoría Casco Histórico',  t:'Gestoría',     lon:-4.1200, lat:40.9490, c:'o', seo:20, sym:null, rows:[['Posición en Google','No aparece para "gestoría Segovia"','o'],['Web','Web básica sin SEO','o'],['Oportunidad perdida','170 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Farmacia San Martín',       t:'Farmacia',     lon:-4.1162, lat:40.9510, c:'o', seo:23, sym:null, rows:[['Posición en Google','No aparece en Google Maps optimizada','o'],['Web','Sin web, ficha Google sin gestionar','o'],['Oportunidad perdida','240 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── ALBUERA ──────────────────────────────────────────────────────────
+  { n:'Clínica Veterinaria Albuera',t:'Veterinaria', lon:-4.1268, lat:40.9422, c:'g', seo:78, sym:null, rows:[['Posición en Google','#2 para "veterinario Segovia"','g'],['Web renovada','Posiciona 24 palabras clave','g'],['Alcance mensual','Visible para 310 búsquedas/mes','g']], cta:null },
+  { n:'Taller Albuera Motos',      t:'Automoción',   lon:-4.1242, lat:40.9415, c:'o', seo:17, sym:null, rows:[['Posición en Google','No aparece para "taller motos Segovia"','o'],['Web','Sin web propia','o'],['Oportunidad perdida','120 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Ferretería Los Olmos',      t:'Ferretería',   lon:-4.1285, lat:40.9435, c:'r', seo:5,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible digitalmente','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── SAN FRUTOS ───────────────────────────────────────────────────────
+  { n:'Gym PowerFit Segovia',      t:'Fitness',      lon:-4.1072, lat:40.9400, c:'g', seo:83, sym:null, rows:[['Posición en Google','#1 para "gimnasio Segovia"','g'],['Impacto','Recibe el 44% de las búsquedas','g'],['Web renovada','Posiciona 27 palabras clave','g']], cta:null },
+  { n:'Academia Babel Idiomas',    t:'Educación',    lon:-4.1055, lat:40.9418, c:'o', seo:21, sym:null, rows:[['Posición en Google','No aparece para "academia inglés Segovia"','o'],['Web','Web sin actualizar desde 2019','o'],['Oportunidad perdida','140 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Mudanzas Hermanos Saez',    t:'Mudanzas',     lon:-4.1040, lat:40.9432, c:'r', seo:3,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Oportunidad','170 búsquedas/mes, ninguna para ellos','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── LA ESTRELLA ───────────────────────────────────────────────────────
+  { n:'Supermercado La Estrella',  t:'Alimentación', lon:-4.1025, lat:40.9468, c:'o', seo:26, sym:null, rows:[['Posición en Google','Sin ficha de Google Business optimizada','o'],['Web','Web básica, sin SEO local','o'],['Oportunidad perdida','200 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Carpintería La Estrella',   t:'Carpintería',  lon:-4.1040, lat:40.9458, c:'r', seo:2,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible para el 100% de clientes potenciales','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Peluquería La Estrella',    t:'Peluquería',   lon:-4.1010, lat:40.9475, c:'g', seo:73, sym:null, rows:[['Posición en Google','#3 para "peluquería Segovia"','g'],['Web renovada','Posiciona 14 palabras clave','g'],['Alcance mensual','Visible para 210 búsquedas/mes','g']], cta:null },
+  { n:'Ferretería El Parque',      t:'Ferretería',   lon:-4.1055, lat:40.9462, c:'o', seo:18, sym:null, rows:[['Posición en Google','No aparece en los 3 primeros resultados','o'],['Web','Sin web, sin ficha Google Business','o'],['Oportunidad perdida','160 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Electricista Norte',        t:'Electricidad', lon:-4.0998, lat:40.9482, c:'r', seo:3,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible para el 100% de clientes potenciales','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── SAN LORENZO ──────────────────────────────────────────────────────
+  { n:'Restaurante San Lorenzo',   t:'Restauración', lon:-4.1138, lat:40.9452, c:'g', seo:71, sym:null, rows:[['Posición en Google','#3 para "restaurante Segovia"','g'],['Web renovada','Reservas online integradas','g'],['Resultado','+55% de reservas en 4 meses','g']], cta:null },
+  { n:'Fontanería San Lorenzo',    t:'Fontanería',   lon:-4.1152, lat:40.9460, c:'g', seo:80, sym:null, rows:[['Posición en Google','#2 para "fontanero Segovia"','g'],['Web renovada','Posiciona 20 palabras clave','g'],['Alcance mensual','Visible para 295 búsquedas/mes','g']], cta:null },
+  { n:'Talleres Rodrigo',          t:'Automoción',   lon:-4.1118, lat:40.9442, c:'r', seo:8,  sym:'!', special:true, badge:'SITUACIÓN CRÍTICA', rows:[['Presencia digital','Sin web. La ficha de Google tiene 2 fotos y 0 reseñas','r'],['Pérdida mensual estimada','480 búsquedas de "taller Segovia" — ninguna llega aquí','r'],['Competencia','3 talleres en primera página. Este no aparece en las primeras 5','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Cerrajería El Salvador',    t:'Cerrajería',   lon:-4.1105, lat:40.9468, c:'o', seo:23, sym:null, rows:[['Posición en Google','No aparece en los 3 primeros resultados','o'],['Web','Sin web optimizada para móvil','o'],['Oportunidad perdida','180 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Cristalería Sur',           t:'Cristalería',  lon:-4.1095, lat:40.9448, c:'r', seo:6,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Sus clientes los encuentran por casualidad','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Electricidad Barrio Sur',   t:'Electricidad', lon:-4.1128, lat:40.9435, c:'r', seo:3,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible para el 100% de clientes potenciales','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── SANTA EULALIA ─────────────────────────────────────────────────────
+  { n:'Clínica Fisio Eulalia',     t:'Fisioterapia', lon:-4.1298, lat:40.9472, c:'g', seo:77, sym:null, rows:[['Posición en Google','#2 para "fisioterapeuta Segovia"','g'],['Alcance mensual','Visible para 280 búsquedas/mes','g'],['Web renovada','Posiciona 19 palabras clave','g']], cta:null },
+  { n:'Bar Eulalia de Siempre',    t:'Hostelería',   lon:-4.1318, lat:40.9482, c:'o', seo:15, sym:null, rows:[['Posición en Google','Sin ficha Google Business activa','o'],['Web','Sin presencia digital propia','o'],['Oportunidad perdida','160 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── SAN ESTEBAN ───────────────────────────────────────────────────────
+  { n:'Ganadería El Pinar',        t:'Ganadería',    lon:-4.1188, lat:40.9518, c:'r', seo:1,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible digitalmente','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── ZAMARRAMALA ───────────────────────────────────────────────────────
+  { n:'Bar El Cruce Zamarramala',  t:'Hostelería',   lon:-4.1395, lat:40.9548, c:'o', seo:14, sym:null, rows:[['Posición en Google','No aparece en Google Maps','o'],['Web','Sin web, sin ficha Google Business','o'],['Oportunidad perdida','80 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Panadería Zamarramala',     t:'Alimentación', lon:-4.1408, lat:40.9555, c:'g', seo:72, sym:null, rows:[['Posición en Google','#2 para "panadería Segovia"','g'],['Web renovada','Posiciona 12 palabras clave','g'],['Alcance mensual','Visible para 180 búsquedas/mes','g']], cta:null },
+  { n:'Fontanería Ruiz e Hijos',   t:'Fontanería',   lon:-4.1420, lat:40.9540, c:'r', seo:5,  sym:null, rows:[['Presencia digital','Solo boca a boca, sin presencia online','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Oportunidad perdida','340 búsquedas/mes van a Fontanería Valverde','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── SAN JOSÉ ─────────────────────────────────────────────────────────
+  { n:'Clínica San José',          t:'Medicina',     lon:-4.1172, lat:40.9425, c:'g', seo:82, sym:null, rows:[['Posición en Google','#1 para "médico Segovia"','g'],['Web renovada','Posiciona 26 palabras clave','g'],['Alcance mensual','Visible para 360 búsquedas/mes','g']], cta:null },
+  { n:'Supermercado San José',     t:'Alimentación', lon:-4.1192, lat:40.9412, c:'o', seo:20, sym:null, rows:[['Posición en Google','Sin ficha Google Business optimizada','o'],['Web','Web básica, sin SEO local','o'],['Oportunidad perdida','190 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Taller San José',           t:'Automoción',   lon:-4.1155, lat:40.9418, c:'r', seo:4,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Oportunidad perdida','230 búsquedas/mes van a la competencia','r']], cta:'¿Tu negocio? Auditoría gratis' },
+  // ── LA LASTRILLA ─────────────────────────────────────────────────────
+  { n:'Guardería La Lastrilla',    t:'Educación',    lon:-4.1028, lat:40.9448, c:'g', seo:75, sym:null, rows:[['Posición en Google','#2 para "guardería Segovia"','g'],['Web renovada','Posiciona 16 palabras clave','g'],['Resultado','+2× de solicitudes de información','g']], cta:null },
+  { n:'Bar Los Pinos',             t:'Hostelería',   lon:-4.1012, lat:40.9460, c:'o', seo:16, sym:null, rows:[['Posición en Google','No aparece en Google Maps','o'],['Web','Sin web, sin ficha Google Business','o'],['Oportunidad perdida','95 búsquedas/mes van a la competencia','o']], cta:'¿Tu negocio? Auditoría gratis' },
+  { n:'Fontanería Lastrilla',      t:'Fontanería',   lon:-4.1042, lat:40.9438, c:'r', seo:5,  sym:null, rows:[['Presencia digital','Sin web, sin Google Business','r'],['Posición en Google','No posiciona para ninguna palabra clave','r'],['Impacto','Invisible digitalmente','r']], cta:'¿Tu negocio? Auditoría gratis' },
+];
+
+maptilersdk.config.apiKey = 'RK2MOnljqNok3qDnoLAS';
+
+const map = new maptilersdk.Map({
+  container: 'map',
+  style: `https://api.maptiler.com/maps/019f28f1-d364-76f2-9498-7ae0680cc15c/style.json?key=RK2MOnljqNok3qDnoLAS`,
+  center: [-4.1185, 40.9488],
+  zoom: 14.8,
+  pitch: 58,
+  bearing: -22,
+  antialias: true,
+  attributionControl: false,
+  logoControl: false,
+  navigationControl: false,
+  // ── INTERACCIÓN DESACTIVADA ──
+  dragPan: false,
+  scrollZoom: false,
+  touchZoomRotate: false,
+  doubleClickZoom: false,
+  keyboard: false,
+  dragRotate: false,
+  minZoom: 14,
+  maxZoom: 16,
+});
+
+map.on('load', () => {
+  document.querySelectorAll(
+    '.maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-logo,.maplibregl-ctrl-attrib'
+  ).forEach(el => el.remove());
+
+  // ── 3D buildings ─────────────────────────────────────────────────────
+  const layers = map.getStyle().layers;
+  let labelLayerId;
+  for (const l of layers) {
+    if (l.type === 'symbol' && l.layout && l.layout['text-field']) { labelLayerId = l.id; break; }
+  }
+
+  try {
+    map.addLayer({
+      id: '3d-buildings',
+      source: 'maptiler_planet',
+      'source-layer': 'building',
+      type: 'fill-extrusion',
+      minzoom: 14,
+      paint: {
+        'fill-extrusion-color': ['interpolate',['linear'],['get','render_height'],0,'#d4cfc8',15,'#c8c2ba',40,'#b8b0a5',80,'#a8a098',150,'#958c80'],
+        'fill-extrusion-height':  ['get','render_height'],
+        'fill-extrusion-base':    ['get','render_min_height'],
+        'fill-extrusion-opacity': 0.85
+      }
+    }, labelLayerId);
+  } catch(e) {}
+
+  // ── GeoJSON source ────────────────────────────────────────────────────
+  const geojson = {
+    type: 'FeatureCollection',
+    features: DATA.map((d, i) => ({
+      type: 'Feature',
+      id: i,
+      geometry: { type: 'Point', coordinates: [d.lon, d.lat] },
+      properties: { idx: i, c: d.c, seo: d.seo, sym: d.sym || '' }
+    }))
+  };
+
+  map.addSource('negocios', { type: 'geojson', data: geojson });
+
+  // Halo estático naranja
+  map.addLayer({ id:'halo-o', type:'circle', source:'negocios', filter:['==',['get','c'],'o'],
+    paint:{ 'circle-radius':['interpolate',['linear'],['zoom'],13,14,16,22], 'circle-color':'#ff8c00', 'circle-opacity':0.28, 'circle-blur':1.4, 'circle-pitch-alignment':'map' }
+  });
+
+  // Halo estático rojo
+  map.addLayer({ id:'halo-r', type:'circle', source:'negocios', filter:['==',['get','c'],'r'],
+    paint:{ 'circle-radius':['interpolate',['linear'],['zoom'],13,15,16,24], 'circle-color':'#ff3333', 'circle-opacity':0.25, 'circle-blur':1.3, 'circle-pitch-alignment':'map' }
+  });
+
+  // Dots — todos estáticos, sin símbolo (el símbolo va en el bounce DOM)
+  map.addLayer({
+    id: 'negocios-dot', type: 'circle', source: 'negocios',
+    paint: {
+      'circle-radius': ['interpolate',['linear'],['zoom'],
+        13, ['case',['==',['get','c'],'g'],4.2,['==',['get','c'],'o'],3.6,3.0],
+        16, ['case',['==',['get','c'],'g'],7.5,['==',['get','c'],'o'],6.4,5.4]
+      ],
+      'circle-color': ['case',
+        ['==',['get','c'],'g'], COLOR.g,
+        ['==',['get','c'],'o'], COLOR.o,
+        COLOR.r
+      ],
+      'circle-stroke-width': 1.8,
+      'circle-stroke-color': 'rgba(255,255,255,0.9)',
+      'circle-opacity': 1
+    }
+  });
+
+  // ── SONAR RINGS ───────────────────────────────────────────────────────
+  const sonarContainer = document.getElementById('map');
+  const sonarItems = DATA.map((d, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'sonar-wrap';
+    wrap.style.position = 'absolute';
+    wrap.style.pointerEvents = 'none';
+    wrap.style.zIndex = '2';
+    sonarContainer.appendChild(wrap);
+
+    const ring = document.createElement('div');
+    ring.className = `sonar-ring ${d.c}${d.special ? ' has-sym' : ''}`;
+    const baseSpeed = d.c === 'g' ? 2.0 : d.c === 'o' ? 2.8 : 3.4;
+    ring.style.animationDuration = baseSpeed + 's';
+    ring.style.animationDelay = (i * 0.18 % baseSpeed) + 's';
+    wrap.appendChild(ring);
+
+    return { wrap, lon: d.lon, lat: d.lat };
+  });
+
+  // Bounce DOM — solo para markers especiales, con símbolo visible
+  const bounceItems = DATA
+    .filter(d => d.special)
+    .map(d => {
+      const wrap = document.createElement('div');
+      wrap.className = 'bounce-wrap';
+      sonarContainer.appendChild(wrap);
+      const dot = document.createElement('div');
+      dot.className = `bounce-dot ${d.c}`;
+      dot.textContent = d.sym;
+      wrap.appendChild(dot);
+      return { wrap, lon: d.lon, lat: d.lat };
+    });
+
+  const hintTargets = [];
+
+  // ── POSICIONAMIENTO ───────────────────────────────────────────────────
+  function updateAllPositions() {
+    sonarItems.forEach(({ wrap, lon, lat }) => {
+      const pt = map.project([lon, lat]);
+      wrap.style.left = pt.x + 'px';
+      wrap.style.top  = pt.y + 'px';
+    });
+    bounceItems.forEach(({ wrap, lon, lat }) => {
+      const pt = map.project([lon, lat]);
+      wrap.style.left = pt.x + 'px';
+      wrap.style.top  = pt.y + 'px';
+    });
+    hintTargets.forEach(({ el, lon, lat }) => {
+      const pt = map.project([lon, lat]);
+      el.style.left = pt.x + 'px';
+      el.style.top  = pt.y + 'px';
+    });
+    requestAnimationFrame(updateAllPositions);
+  }
+  updateAllPositions();
+
+  // ── TOOLTIP ───────────────────────────────────────────────────────────
+  const tt = document.getElementById('tt');
+  let hideTimer = null;
+
+  tt.addEventListener('mouseenter', () => { if(hideTimer){ clearTimeout(hideTimer); hideTimer=null; } });
+  tt.addEventListener('mouseleave', () => { tt.classList.remove('show'); });
+
+  function buildCard(d) {
+    const badgeHTML = d.badge ? `<div class="tt-badge-top ${d.c}">${d.badge}</div>` : '';
+    const rowsHTML = d.rows.map(r =>
+      `<div class="tt-row"><div class="tt-lbl">${r[0]}</div><div class="tt-val ${r[2]}">${r[1]}</div></div>`
+    ).join('');
+    const ctaHTML = d.cta ? `
+      <a class="tt-cta" href="#">
+        <span>${d.cta}</span>
+        <div class="tt-cta-arr"><svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1 8L8 1M8 1H2.5M8 1V6.5" stroke="#0a0a0a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </a>` : '';
+    return `
+      ${badgeHTML}
+      <div class="tt-header">
+        <div class="tt-tag">${d.t}</div>
+        <div class="tt-badge ${d.c}">${LABEL[d.c]}</div>
+      </div>
+      <div class="tt-name">${d.n}</div>
+      <div class="tt-div"></div>
+      ${rowsHTML}
+      <div class="tt-bar-wrap"><div class="tt-bar ${d.c}" style="width:${d.seo}%"></div></div>
+      <div class="tt-bar-meta"><span>SEO Score</span><strong>${d.seo}/100</strong></div>
+      ${ctaHTML}`;
+  }
+
+  function showTooltip(e) {
+    const d = DATA[e.features[0].properties.idx];
+    tt.innerHTML = buildCard(d);
+    const TW = 234, TH = d.cta ? 218 : 185, OFF = 14;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let left = e.point.x + OFF;
+    let top  = e.point.y - TH / 2;
+    if (left + TW > vw - 10) left = e.point.x - TW - OFF;
+    if (top < 8)              top  = 8;
+    if (top + TH > vh - 8)   top  = vh - TH - 8;
+    tt.style.left = left + 'px';
+    tt.style.top  = top  + 'px';
+    tt.classList.add('show');
+  }
+
+  map.getCanvas().style.cursor = 'default';
+
+  map.on('mouseenter', 'negocios-dot', (e) => {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    map.getCanvas().style.cursor = 'pointer';
+    showTooltip(e);
+  });
+
+  map.on('mouseleave', 'negocios-dot', () => {
+    map.getCanvas().style.cursor = 'default';
+    hideTimer = setTimeout(() => tt.classList.remove('show'), 80);
+  });
+
+  map.on('click', 'negocios-dot', showTooltip);
+
+  // ── ROTACIÓN ─────────────────────────────────────────────────────────
+  let bearing = -22;
+  (function rotate() {
+    bearing -= 0.012;
+    map.setBearing(bearing);
+    requestAnimationFrame(rotate);
+  })();
+});
+</script>
+</body>
+</html>
